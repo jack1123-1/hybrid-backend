@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import random
 import json
+from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
@@ -12,6 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 from Irradiance import IrradiancePredictor
 from linear_regression import PowerPredictor
 
+HARD_CODED_SOLAR_IRRADIANCE = 782
 username = quote_plus("site")
 password = quote_plus("@sitesignup515@")
 
@@ -126,16 +128,96 @@ def get_hour():
     except Exception as e:
         return f"Error, {e}", 500
 
+@app.route("/data/historical", methods=["GET"])
+def get_historical_data():
+    try:
+        now = datetime.utcnow()
+        last_24_hours = now - timedelta(hours=24)
+        last_7_days = now - timedelta(days=7)
 
-@app.route("/esp32/post-readings", methods=["GET"])
+        recent_data = list(readings_collection.find({
+            "timestamp": {"$gte": last_24_hours.isoformat()}
+        }, {"_id": 0, "overall_voltage": 1, "overall_current": 1, "timestamp": 1}))
+
+        daily_data = list(readings_collection.find({
+            "timestamp": {"$gte": last_7_days.isoformat()}
+        }, {"_id": 0, "overall_voltage": 1, "overall_current": 1, "timestamp": 1}))
+
+        power_per_hour = [round(r["overall_voltage"] * r["overall_current"], 2) for r in recent_data]
+        power_per_day = [round(r["overall_voltage"] * r["overall_current"], 2) for r in daily_data]
+
+        compare_data = []
+        recent_hourly = hourly_collection.find().sort("_id", -1).limit(24)
+        for record in recent_hourly:
+            input_data = {
+                "solar_irradiance": HARD_CODED_SOLAR_IRRADIANCE,
+                "wind_speed": record.get("wind", 0),
+                "cloud_cover": record.get("cloud_cover", 0),
+                "temperature": record.get("temperature", 0),
+                "solar_voltage": record.get("solar_voltage", 0),
+                "wind_voltage": record.get("wind_voltage", 0),
+            }
+            compare_data.append({
+                "powergenerated": power_predictor.predict(input_data),
+                "windspeed": input_data["wind_speed"],
+                "solarIrr": input_data["solar_irradiance"]
+            })
+
+        return jsonify({
+            "historical": {
+                "powergeneratedPerHour": power_per_hour,
+                "powergeneratedPerDay": power_per_day,
+                "predictedPowerVsWindAndSolarIrr": compare_data
+            }
+        }), 200
+    except Exception as e:
+        return (f"Error: {e}", 500)
+
+@app.route("/data/predicted", methods=["GET"])
+def get_predicted_data():
+    try:
+        latest = hourly_collection.find_one(sort=[("_id", -1)])
+        if not latest:
+            return jsonify({"message": "No predicted data available"}), 404
+
+        input_data = {
+            "solar_irradiance": HARD_CODED_SOLAR_IRRADIANCE,
+            "wind_speed": latest.get("wind", 0),
+            "cloud_cover": latest.get("cloud_cover", 0),
+            "temperature": latest.get("temperature", 0),
+            "solar_voltage": latest.get("solar_voltage", 0),
+            "wind_voltage": latest.get("wind_voltage", 0),
+        }
+
+        power = power_predictor.predict(input_data)
+        prediction = {
+            "solar-irradiance": input_data["solar_irradiance"],
+            "windspeed": input_data["wind_speed"],
+            "powergenerated": power
+        }
+        return jsonify({"predicted": prediction}), 200
+    except Exception as e:
+        return (f"Error: {e}", 500)
+
+
+@app.route("/esp32/post-readings", methods=["POST"])
 def post_readings():
-    data = request.get_json()
-    overall_voltage = data['output_voltage']
-    overall_current = data['output_current']
-    wind_voltage = data['wind_voltage']
-    readings = {'overall_voltage': overall_voltage, 'overall_current': overall_current, 'wind_voltage': wind_voltage}
-    readings_collection.insert_many(readings)
-    return jsonify({"status": "success"}), 200
+    try:
+        data = request.get_json(force=True)
+        overall_voltage = data.get('output_voltage')
+        overall_current = data.get('output_current')
+        wind_voltage = data.get('wind_voltage')
+
+        readings = {
+            'overall_voltage': overall_voltage,
+            'overall_current': overall_current,
+            'wind_voltage': wind_voltage
+        }
+
+        readings_collection.insert_one(readings)
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route("/weather/get-readings", methods=["GET"])
 def get_readings():
