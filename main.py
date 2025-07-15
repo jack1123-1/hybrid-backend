@@ -164,23 +164,10 @@ def get_live_data():
 @app.route("/data/historical", methods=["GET"])
 def get_historical_data():
     try:
-        now = datetime.utcnow()
-        last_24_hours = now - timedelta(hours=24)
-        last_7_days = now - timedelta(days=7)
-
-        recent_data = list(readings_collection.find({
-            "timestamp": {"$gte": last_24_hours.isoformat()}
-        }, {"_id": 0, "overall_voltage": 1, "overall_current": 1, "timestamp": 1}))
-
-        daily_data = list(readings_collection.find({
-            "timestamp": {"$gte": last_7_days.isoformat()}
-        }, {"_id": 0, "overall_voltage": 1, "overall_current": 1, "timestamp": 1}))
-
-        power_per_hour = [round(r["overall_voltage"] * r["overall_current"], 2) for r in recent_data]
-        power_per_day = [round(r["overall_voltage"] * r["overall_current"], 2) for r in daily_data]
-
         compare_data = []
+        
         recent_hourly = hourly_collection.find().sort("_id", -1).limit(24)
+
         for record in recent_hourly:
             input_data = {
                 "solar_irradiance": record.get("solar_irradiance_wm2", 0),
@@ -196,15 +183,16 @@ def get_historical_data():
                 "solarIrr": input_data["solar_irradiance"]
             })
 
-        return jsonify({
-            "historical": {
-                "powergeneratedPerHour": power_per_hour,
-                "powergeneratedPerDay": power_per_day,
-                "predictedPowerVsWindAndSolarIrr": compare_data
-            }
-        }), 200
+        historical_data = {
+            "powergeneratedPerHour": compare_data
+        }
+
+        return jsonify(historical_data), 200
+
     except Exception as e:
         return (f"Error: {e}", 500)
+
+
 
 @app.route("/data/previous", methods=["GET"])
 def get_previous_data():
@@ -231,12 +219,9 @@ def post_readings():
     try:
         data = request.get_json(force=True)
         readings = {
-            'overall_voltage': data.get('output_voltage'),
-            'overall_current': data.get('output_current'),
+            'overall_voltage': data.get('overall_voltage'),
+            'overall_current': data.get('overall_current'),
             'wind_voltage': data.get('wind_voltage'),
-            'solar_voltage': data.get('solar_voltage'),
-            'solar_current': data.get('solar_current'),
-            'wind_current': data.get('wind_current'),
             'timestamp': datetime.utcnow().isoformat()
         }
         readings_collection.insert_one(readings)
