@@ -33,7 +33,7 @@ except Exception as e:
     irradiance_model = None
     power_model = None
 
-@app.route("/data/weather-live-prediction", methods=["GET"])
+@app.route("/esp32/get-readings", methods=["GET"])
 def weather_live_prediction():
     try:
         lat = float(request.args.get("lat", -17.83))
@@ -94,7 +94,7 @@ def weather_live_prediction():
             if isinstance(power_prediction, dict):
                 predicted_power = power_prediction
             else:
-                predicted_power = {"power_watts": float(power_prediction)}
+                predicted_power = float(power_prediction)
         except Exception as e:
             print(f"Power prediction error: {e}")
             predicted_power = {"power_watts": 0, "error": str(e)}
@@ -125,6 +125,7 @@ def health_check():
             "power_model": power_model is not None
         }
     }), 200
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
