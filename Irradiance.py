@@ -36,8 +36,16 @@ class IrradiancePredictor:
             raise ValueError("Model not trained")
 
         irradiance_input = pd.DataFrame(
-            [[conditions['solar_voltage'], conditions['wind_voltage']]],
-            columns=['solar_voltage_v', 'wind_voltage_v'])
+            [[conditions['overall_voltage'], conditions['wind_voltage']]],
+            columns=['overall_voltage_v', 'wind_voltage_v'])
         irradiance_value = self.irradiance_model.predict(irradiance_input)[0]
 
         return max(0, irradiance_value)
+    
+    def get_model_info(self):
+        return {
+            'is_trained': self.is_trained,
+            'metrics': self.model_metrics,
+            'feature_columns': self.feature_columns,
+            'target_column': self.target_column
+        }

@@ -22,7 +22,6 @@ class SolarPredictor:
     def train(self):
         df = pd.DataFrame(data)
 
-        # Remove solar_voltage_v from features since it's the target
         data_features = ['temperature_c', 'humidity_percent', 'cloud_cover_percent',
                          'wind_speed_kmh', 'solar_irradiance_wm2', 'wind_voltage_v']
         solar_target = 'solar_voltage_v'
@@ -37,7 +36,6 @@ class SolarPredictor:
         accuracy = r2_score(solar_y, solar_predictions)
         print(f"Solar model R_squared Score: {accuracy:.3f}")
 
-        # Show feature importance
         importance = self.model.feature_importances_
         print("\nSolar Model Feature Importance:")
         for feature, imp in zip(data_features, importance):
@@ -61,7 +59,6 @@ class WindPredictor:
     def train(self):
         df = pd.DataFrame(data)
 
-        # Remove wind_voltage_v from features since it's the target
         data_features = ['temperature_c', 'humidity_percent', 'cloud_cover_percent',
                          'wind_speed_kmh', 'solar_irradiance_wm2', 'solar_voltage_v']
         wind_target = 'wind_voltage_v'
@@ -99,18 +96,15 @@ class PowerPredictor:
     def train(self):
         df = pd.DataFrame(data)
 
-        # Use consistent column names and calculate power from voltage and current
         features = ['temperature_c', 'humidity_percent', 'cloud_cover_percent',
                     'wind_speed_kmh', 'solar_irradiance_wm2', 'wind_voltage_v', 'solar_voltage_v']
 
         power_X = df[features]
 
-        # Calculate total power if voltage and current columns exist
         if 'combined_voltage_output_v' in df.columns and 'combined_current_output_a' in df.columns:
             total_power_watts = df['combined_voltage_output_v'] * df['combined_current_output_a']
         else:
-            # Fallback: estimate power from voltages (assuming some current)
-            total_power_watts = (df['wind_voltage_v'] + df['solar_voltage_v']) * 2  # Assuming 2A current
+            total_power_watts = (df['wind_voltage_v'] + df['solar_voltage_v']) * 2
 
         power_y = total_power_watts
 
@@ -131,7 +125,6 @@ class PowerPredictor:
         if not self.is_trained:
             raise ValueError("Model must be trained first")
 
-        # Make prediction with all required features
         X = [[temperature, humidity, cloud_cover, wind_speed, solar_irradiance, wind_voltage, solar_voltage]]
         power = self.model.predict(X)[0]
 
@@ -146,9 +139,7 @@ class PowerPredictor:
             return "Low power: Only essential devices"
 
 
-# Usage
 if __name__ == "__main__":
-    # Create and train all predictors
     solar_predictor = SolarPredictor()
     wind_predictor = WindPredictor()
     power_predictor = PowerPredictor()
@@ -160,7 +151,6 @@ if __name__ == "__main__":
     print("\nTraining Power Predictor...")
     power_predictor.train()
 
-    # Test predictions
     test_conditions = {
         'temperature': 22,
         'humidity': 40,
@@ -169,7 +159,6 @@ if __name__ == "__main__":
         'solar_irradiance': 800
     }
 
-    # Get individual predictions
     solar_voltage = solar_predictor.predict(
         test_conditions['temperature'],
         test_conditions['humidity'],
@@ -186,7 +175,6 @@ if __name__ == "__main__":
         test_conditions['solar_irradiance']
     )
 
-    # Get power prediction
     power = power_predictor.predict(
         test_conditions['temperature'],
         test_conditions['humidity'],
